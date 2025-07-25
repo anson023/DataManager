@@ -6,13 +6,28 @@
   <style>
     body {
       font-family: sans-serif;
-      padding: 20px;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      min-height: 100vh;
+      margin: 0;
     }
     .container {
       max-width: 800px;
       width: 100%;
+      flex: 1;
+      margin: 0 auto;
+    }
+    footer {
+      max-width: 800px;
+      text-align: left;         
+      font-size: small;
+      color: gray;
+    }
+    .footer-wrapper {
+      display: flex;
+      justify-content: flex-end; 
+      max-width: 100%;
+      padding: 0 10px 10px 10px; 
     }
     textarea {
       width: 100%;
@@ -39,6 +54,15 @@
     .low {
       color: blue;
       font-weight: bold;
+    }
+    .uplogs {
+      color: gray;
+      font-size: small;
+    }
+    .uplogs-head {
+      color: rgb(88, 88, 88);
+      font-weight: bold;
+      font-size: small;
     }
     #outputText {
       margin-top: 15px;
@@ -70,7 +94,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>檢查報告整理器 v0.1</h1>
+    <h1>檢查報告整理器</h1>
     <p>請貼上報告內容：</p>
     <textarea id="rawInput" placeholder="貼上原始報告資料..."></textarea>
     <button onclick="processReport()">整理報告</button>
@@ -107,6 +131,15 @@
       <label for="formatInput">輸出格式（可使用 {data}, {report_time}, {order_time}）:</label>
       <input type="text" id="formatInput" style="width:100%; margin-top:5px;" value="({report_time}) {data}">
     </div>
+  </div>
+  <div class="footer-wrapper">
+    <footer>
+      <span class="uplogs-head">更新日誌 :<br></span>
+      <span class="uplogs">
+        2025/07/26 v0.1 新增檢查報告整理器<br>
+        Any problem? Please contact anson012@yahoo.com.tw!
+      </span>
+    </footer>
   </div>
 
   <script>
