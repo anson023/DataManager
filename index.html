@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>血液檢查報告整理器</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      margin-bottom: 10px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .high {
+      color: red;
+      font-weight: bold;
+    }
+    .low {
+      color: blue;
+      font-weight: bold;
+    }
+    #outputText {
+      margin-top: 15px;
+      width: 100%;
+      height: 80px;
+    }
+    #copyMessage {
+      margin-left: 10px;
+      color: green;
+      font-weight: bold;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #tabs { margin-top: 20px; }
+    .tab-button {
+      margin-right: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: #f0f0f0;
+    }
+    .tab-button.active {
+      background: #ddd;
+      font-weight: bold;
+    }
+    .tab-content { display: none; margin-top: 15px; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>檢查報告整理器</h1>
+    <p>請貼上報告內容：</p>
+    <textarea id="rawInput" placeholder="貼上原始報告資料..."></textarea>
+    <button onclick="processReport()">整理報告</button>
+    <button onclick="pasteFromClipboard()">從剪貼簿貼上並整理</button>
+    <button onclick="clearText()">清除內容</button>
+
+    <div id="tabs">
+      <button class="tab-button active" onclick="switchTab('reportTab')">報告</button>
+      <button class="tab-button" onclick="switchTab('settingTab')">設定</button>
+    </div>
+
+    <div id="reportTab" class="tab-content active">
+      <div id="reportInfo"></div>
+      <table id="resultTable" style="display:none">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="selectAll" checked onclick="toggleAll(this)"></th>
+            <th>項目名稱</th>
+            <th>結果值</th>
+            <th>單位</th>
+            <th>參考值</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <button id="exportBtn" style="display:none; margin-top:10px;" onclick="exportSelected()">輸出選取資料</button>
+      <button id="copyBtn" style="display:none; margin-left:10px;" onclick="copyToClipboard()">複製內容</button>
+      <span id="copyMessage">內容已複製！</span>
+      <textarea id="outputText" readonly style="display:none;"></textarea>
+    </div>
+
+    <div id="settingTab" class="tab-content">
+      <label for="formatInput">輸出格式（可使用 {data}, {report_time}, {order_time}）:</label>
+      <input type="text" id="formatInput" style="width:100%; margin-top:5px;" value="({report_time}) {data}">
+    </div>
+  </div>
+
+  <script>
+    let reportDate = "", orderDate = "";
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelector(`[onclick*="${tabId}"]`).classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    function toggleAll(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.rowCheckbox');
+      checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+    }
+
+    function convertUnit(unit) {
+      return unit.replace('10^3', 'k');
+    }
+
+    function extractMonthDay(datetimeStr) {
+      const match = datetimeStr.match(/(\d{4})\/(\d{2})\/(\d{2})/);
+      return match ? `${parseInt(match[2])}/${parseInt(match[3])}` : "";
+    }
+
+    async function pasteFromClipboard() {
+        try {
+            const text = await navigator.clipboard.readText();
+            document.getElementById('rawInput').value = text;
+            processReport();
+        } catch (err) {
+            alert('無法讀取剪貼簿內容，可能是因為瀏覽器不支援或權限不足。');
+            console.error(err);
+        }
+    }
+
+    function clearText() {
+        document.getElementById('rawInput').value  = '';
+    }
+
+    function processReport() {
+      const input = document.getElementById('rawInput').value;
+      const lines = input.split("\n");
+
+      const idMatch = input.match(/【(\d+)\s+(.+?)】/);
+      const name = idMatch ? idMatch[2] : "未知";
+      const times = input.match(/開單日期:(.*?)檢查日期:(.*?)報告日期:(.*?)\n/);
+
+      if (times) {
+        orderDate = extractMonthDay(times[1].trim());
+        reportDate = extractMonthDay(times[3].trim());
+      }
+
+      let infoHTML = `<p><strong>姓名：</strong>${name}</p>`;
+      if (times) {
+        infoHTML += `<p><strong>開單：</strong>${times[1]} | <strong>檢查：</strong>${times[2]} | <strong>報告：</strong>${times[3]}</p>`;
+      }
+      document.getElementById("reportInfo").innerHTML = infoHTML;
+
+      const tableBody = document.getElementById("tableBody");
+      tableBody.innerHTML = "";
+      let start = false;
+      for (let line of lines) {
+        if (line.includes("項 目 名 稱")) start = true;
+        if (!start || line.includes("-------")) continue;
+
+        const itemMatch = line.match(/^\s*(\w[\w\-\s]+?)\s+(H |L )?([\d.]+)?\s+([%\w^/]+)?\s+(\d+(\.\d+)?\s*-\s*\d+(\.\d+)?|＜?\d+(\.\d+)?|)$/);
+        if (itemMatch) {
+          const name = itemMatch[1].trim();
+          const flag = (itemMatch[2] || '').trim();
+          const value = itemMatch[3] || '';
+          let unit = itemMatch[4] || '';
+          const ref = itemMatch[5] || '';
+          const status = flag === 'H' ? '<span class="high">H</span>' : (flag === 'L' ? '<span class="low">L</span>' : '');
+
+          unit = convertUnit(unit);
+
+          const row = `<tr>
+            <td><input type="checkbox" class="rowCheckbox" checked></td>
+            <td>${name}</td>
+            <td>${value}</td>
+            <td>${unit}</td>
+            <td>${ref}</td>
+            <td>${status}</td>
+          </tr>`;
+          tableBody.innerHTML += row;
+        }
+      }
+      document.getElementById("resultTable").style.display = "table";
+      document.getElementById("exportBtn").style.display = "inline-block";
+      document.getElementById("copyBtn").style.display = "inline-block";
+      document.getElementById("outputText").style.display = "block";
+      document.getElementById("outputText").value = "";
+      const message = document.getElementById("copyMessage");
+      message.style.opacity = 0;
+    }
+
+    function exportSelected() {
+      const format = document.getElementById("formatInput").value;
+      const rows = document.querySelectorAll('#tableBody tr');
+      const dataParts = [];
+      rows.forEach(row => {
+        const checkbox = row.querySelector('.rowCheckbox');
+        if (checkbox && checkbox.checked) {
+          const cells = row.querySelectorAll('td');
+          const itemName = cells[1].innerText;
+          const value = cells[2].innerText;
+          const unit = cells[3].innerText;
+          dataParts.push(`${itemName}: ${value}${unit}`);
+        }
+      });
+      const fullData = dataParts.join(", ");
+      const output = format.replace('{data}', fullData)
+                           .replace('{report_time}', reportDate)
+                           .replace('{order_time}', orderDate);
+      document.getElementById("outputText").value = output;
+    }
+
+    function copyToClipboard() {
+      const output = document.getElementById("outputText");
+      output.select();
+      output.setSelectionRange(0, 99999);
+      document.execCommand("copy");
+      const message = document.getElementById("copyMessage");
+      message.style.opacity = 1;
+      setTimeout(() => {
+        message.style.opacity = 0;
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
